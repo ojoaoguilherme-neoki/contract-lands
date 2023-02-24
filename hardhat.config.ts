@@ -3,7 +3,7 @@ import "@nomicfoundation/hardhat-toolbox";
 import * as env from "dotenv";
 env.config();
 const config: HardhatUserConfig = {
-  solidity: "0.8.17",
+  solidity: "0.8.19",
 
   networks: {
     polygonMumbai: {

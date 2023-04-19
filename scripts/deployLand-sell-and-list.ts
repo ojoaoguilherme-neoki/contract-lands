@@ -4,13 +4,12 @@ import * as env from "dotenv";
 import { parseEther } from "ethers/lib/utils";
 env.config();
 async function main() {
-  console.log(`Deploying Lands...`);
-  const LAND = await ethers.getContractFactory("NeokiLands");
-  const land = await LAND.deploy(
-    "https://gateway.pinata.cloud/ipfs/QmXNtAhpbqMZkPzRxan34ebD5C2QvNWxuk61uMiRrRDuzG"
+  console.log(`Getting Lands...`);
+  const land = await ethers.getContractAt(
+    "NeokiLands",
+    "0x43f6E0146b054B098DA428ce86C8caE7F56Ff5aB"
   );
-  await land.deployed();
-  console.log(`Lands deployed to ${land.address}`);
+  console.log(`Lands contract: ${land.address}`);
   console.log(`-----------------------`);
   console.log(`Deploying Land Sell contract...`);
   const LandSell = await ethers.getContractFactory("LandSellV2");
@@ -18,13 +17,7 @@ async function main() {
   await landSell.deployed();
   console.log(`Land Sell contract deployed to ${landSell.address}`);
   console.log(`-----------------------`);
-  console.log(`Minting lands to sell`);
-  const tx = await land.mintBatch(
-    25,
-    "0x85b4f58Ec2fDFc73b590422780F605be20ca6C02"
-  );
-  await tx.wait();
-  console.log(`Minted: has => ${tx.hash}`);
+
   console.log("Approving nft for sell...");
   const tx2 = await land.setApprovalForAll(landSell.address, true);
   await tx2.wait();

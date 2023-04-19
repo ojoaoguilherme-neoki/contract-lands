@@ -31,8 +31,5 @@
     "@openzeppelin/contracts": "^4.8.0",
     "dotenv": "^16.0.3",
     "moment": "^2.29.4"
-  },
-  "scripts": {
-    "dev": "ts-node client/index.ts"
   }
 }

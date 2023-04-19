@@ -11,9 +11,9 @@ const config: HardhatUserConfig = {
       accounts: [`${process.env.DEPLOYER_ACCOUNT}`],
     },
 
-    hardhat: {
-      gas: "auto",
-    },
+    // hardhat: {
+    //   gas: "auto",
+    // },
   },
 };
 

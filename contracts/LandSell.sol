@@ -4,186 +4,180 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
+import "@openzeppelin/contracts/interfaces/IERC721.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "./Lands.sol";
 
-interface LANDS {
-    function mint(address to) external;
+contract LandSell is AccessControl, ERC721Holder, ReentrancyGuard {
+    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
 
-    function safeTransferFrom(
-        address from,
-        address to,
-        uint256 tokenId
-    ) external;
-
-    function ownerOf(uint256 tokenId) external view returns (address);
-}
-
-contract LandSell is AccessControl, ERC721Holder {
     struct Map {
         address owner;
         uint256 tokenId;
         uint256 price;
-        bool sellable;
     }
     using SafeERC20 for IERC20;
+    using Counters for Counters.Counter;
 
-    IERC20 public nko;
-    LANDS public land;
-    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
-    uint256 public constant totalSelableLands = 211900;
+    IERC20 public token; //Niko Token address
+    IERC721 public land; // Neoki LANDs
+
+    // Getters
+    uint256[] public tokensForSell;
     mapping(uint256 => Map) public landMap;
-    address public treasury;
 
-    constructor(address _nko, address _land, address _treasury) {
-        nko = IERC20(_nko);
-        land = LANDS(_land);
-        treasury = _treasury;
+    constructor(address _token, address _land) {
+        require(
+            _token != address(0),
+            "LandSell: NKO cannot be set to address(0)"
+        );
+        require(
+            _land != address(0),
+            "LandSell: LANDS cannot be set to address(0)"
+        );
+
+        token = IERC20(_token);
+        land = IERC721(_land);
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(ADMIN_ROLE, msg.sender);
     }
 
-    function mintLands(uint256 amount) external onlyRole(ADMIN_ROLE) {
-        for (uint256 index; index < amount; index++) {
-            land.mint(address(this));
-        }
-    }
-
-    /// @dev defines the price for a range of tokenId
-    /// @param start is the tokenId initial starting point
-    /// @param end is the final tokenId
-    /// @param price price to sell tokenId
-    function definePricePerRange(
-        uint256 start,
-        uint256 end,
-        uint256 price
-    ) external onlyRole(ADMIN_ROLE) {
-        for (uint256 index = start; index <= end; index++) {
-            require(
-                land.ownerOf(index) == address(this),
-                "Sell Contract not owner of LAND"
-            );
-            landMap[index] = Map({
-                owner: treasury,
-                tokenId: index,
-                price: price,
-                sellable: true
-            });
-        }
-    }
-
-    function adminSetLandForSell(
-        bool[] memory sell,
-        uint256[] memory list
-    ) external onlyRole(ADMIN_ROLE) {
-        require(
-            sell.length == list.length,
-            "Length of parameter are different, should be equal"
-        );
-
-        for (uint256 index; index < list.length; index++) {
-            landMap[list[index]].sellable = sell[index];
-        }
-    }
-
-    function setLandForSell(bool sell, uint256 tokenId) external {
-        require(
-            landMap[tokenId].owner == msg.sender,
-            "Caller not the LAND owner"
-        );
-        require(
-            msg.sender == land.ownerOf(tokenId),
-            "Sell Contract not owner of LAND"
-        );
-        landMap[tokenId].sellable = sell;
-    }
-
-    function adminDefineLandPrice(
-        uint256 tokenId,
-        uint256 price
-    ) external onlyRole(ADMIN_ROLE) {
-        require(
-            msg.sender == land.ownerOf(tokenId),
-            "Sell Contract not owner of LAND"
-        );
-        require(
-            landMap[tokenId].owner == treasury,
-            "LAND not owned by treasury"
-        );
-        landMap[tokenId].price = price;
-    }
-
-    function defineLandPrice(uint256 tokenId, uint256 price) external {
-        require(
-            msg.sender == land.ownerOf(tokenId),
-            "Sell Contract not owner of LAND"
-        );
-        landMap[tokenId].price = price;
-    }
-
-    function buyLand(uint256[] memory tokenIds) external {
-        for (uint256 index; index < tokenIds.length; index++) {
-            Map memory map = landMap[tokenIds[index]];
-
-            require(
-                address(this) == land.ownerOf(map.tokenId),
-                "Sell Contract does not own the LAND requested"
-            );
-            require(map.sellable == true, "LAND not for sell");
-            nko.safeTransferFrom(msg.sender, map.owner, map.price);
-            land.safeTransferFrom(address(this), msg.sender, map.tokenId);
-            delete landMap[tokenIds[index]];
-        }
-    }
-
-    function getPricePerRange(
-        uint256 start,
-        uint256 end
-    ) public view returns (Map[] memory) {
-        uint256 range = end - start + 1;
-        Map[] memory map = new Map[](range);
-        uint256 mapIndex;
-        for (uint256 tokenId = start; tokenId <= end; tokenId++) {
-            map[mapIndex] = landMap[tokenId];
-            mapIndex++;
-        }
-        return map;
-    }
-
-    function getTokenIdPrice(
-        uint256 tokenId
-    ) public view returns (uint256 price) {
-        price = landMap[tokenId].price;
-    }
-
-    function listLand(uint256 tokenId, uint256 price) external {
-        require(
-            landMap[tokenId].tokenId == 0,
-            "Cannot override existing LAND listed"
-        );
-
-        require(
-            land.ownerOf(tokenId) == msg.sender,
-            "Caller does not own LAND"
-        );
-        require(price > 0, "LAND price must be greater than 0");
-        land.safeTransferFrom(msg.sender, address(this), tokenId);
-        Map memory map = Map({
-            tokenId: tokenId,
-            owner: msg.sender,
-            price: price,
-            sellable: true
-        });
-        landMap[tokenId] = map;
-    }
-
-    function retreiveLand(uint256 tokenId) external {
-        Map memory map = landMap[tokenId];
-
+    modifier onlyWhenContractOwnLand(uint256 tokenId) {
         require(
             land.ownerOf(tokenId) == address(this),
-            "Contract does not have the LAND"
+            "LandSell: Contract does not own LAND"
         );
-        require(map.owner == msg.sender, "Caller not the LAND owner");
+        require(
+            landMap[tokenId].owner == msg.sender,
+            "LandSell: Caller not LAND owner"
+        );
+        _;
+    }
+
+    modifier onlyWhenLandOwner(Map memory landToken) {
+        require(
+            landToken.owner != address(0),
+            "LandSell: Owner cannot be address 0"
+        );
+        require(
+            landToken.price > 0,
+            "LandSell: Price cannot be less than or equal to 0"
+        );
+        require(
+            landToken.tokenId > 0,
+            "LandSell: LAND tokenId cannot be less than or equal to 0"
+        );
+        require(
+            landMap[landToken.tokenId].tokenId == 0,
+            "LandSell: Land token ID must not be already registered"
+        );
+        _;
+    }
+
+    function removeLandFromLandsArray(uint256 tokenId) internal {
+        uint256 removeIndex = 0;
+        for (uint256 i = 0; i < tokensForSell.length; i++) {
+            if (tokensForSell[i] == tokenId) {
+                delete tokensForSell[i];
+                removeIndex = i;
+            }
+        }
+        tokensForSell[removeIndex] = tokensForSell[tokensForSell.length - 1];
+        tokensForSell.pop();
+    }
+
+    function getLandData(uint256 tokenId) external view returns (Map memory) {
+        return landMap[tokenId];
+    }
+
+    function getAllSellingLands() external view returns (Map[] memory) {
+        Map[] memory landsForSell = new Map[](tokensForSell.length);
+        uint256 index = 0;
+        for (uint i = 0; i < tokensForSell.length; i++) {
+            landsForSell[index] = landMap[tokensForSell[i]];
+            index++;
+        }
+        return landsForSell;
+    }
+
+    /// Sell multiple lands at once
+    /// @param tokens tokenIDs
+    function sellBatchLands(Map[] calldata tokens) external nonReentrant {
+        require(
+            tokens.length > 0 && tokens.length <= 300,
+            "LandSell: Tokens batch cannot be zero nor above 300"
+        );
+        for (uint256 i = 0; i < tokens.length; i++) {
+            require(
+                tokens[i].owner != address(0),
+                "LandSell: Owner cannot be address 0"
+            );
+            require(
+                tokens[i].price > 0,
+                "LandSell: Price cannot be less than or equal to 0"
+            );
+            require(
+                land.ownerOf(tokens[i].tokenId) == msg.sender,
+                "LandSell: Caller does not own LAND"
+            );
+            require(
+                landMap[tokens[i].tokenId].tokenId == 0,
+                "LandSell: Land cannot be already for sell"
+            );
+            land.safeTransferFrom(msg.sender, address(this), tokens[i].tokenId);
+            landMap[tokens[i].tokenId] = tokens[i];
+            tokensForSell.push(tokens[i].tokenId);
+        }
+    }
+
+    /// User is selling one land
+    /// @param landToken TokenID
+    function sellLand(
+        Map memory landToken
+    ) external onlyWhenLandOwner(landToken) nonReentrant {
+        land.safeTransferFrom(msg.sender, address(this), landToken.tokenId);
+        landMap[landToken.tokenId] = landToken;
+        tokensForSell.push(landToken.tokenId);
+    }
+
+    // User is buying land from the contract
+    function buyLand(uint256 tokenId) external nonReentrant {
+        require(
+            land.ownerOf(tokenId) == address(this),
+            "LandSell: Contract does not own LAND"
+        );
+        require(tokenId != 0, "LandSell: there is no token with tokenId 0");
+        Map memory currentLand = landMap[tokenId];
+        removeLandFromLandsArray(tokenId);
         delete landMap[tokenId];
+
+        token.safeTransferFrom(
+            msg.sender,
+            currentLand.owner,
+            currentLand.price
+        );
+
         land.safeTransferFrom(address(this), msg.sender, tokenId);
+    }
+
+    function removeLand(
+        uint256 tokenId
+    ) external onlyWhenContractOwnLand(tokenId) nonReentrant {
+        Map memory currentLand = landMap[tokenId];
+        removeLandFromLandsArray(tokenId);
+        delete landMap[tokenId];
+        land.safeTransferFrom(
+            address(this),
+            currentLand.owner,
+            currentLand.tokenId
+        );
+    }
+
+    function updateLandPrice(
+        uint256 tokenId,
+        uint256 price
+    ) external onlyWhenContractOwnLand(tokenId) nonReentrant {
+        require(price > 0, "LandSell: Cannot set price of 0");
+        landMap[tokenId].price = price;
     }
 }

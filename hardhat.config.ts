@@ -15,6 +15,12 @@ const config: HardhatUserConfig = {
     //   gas: "auto",
     // },
   },
+
+  etherscan: {
+    apiKey: {
+      polygonMumbai: `${process.env.POLYSCAN_API_KEY}`,
+    },
+  },
 };
 
 export default config;
